@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 23)
 
 project(libmissioncontrol)
 
+add_executable(test src/test.cpp)
+
 include_directories(include)
 
 # Turn on all warning.
