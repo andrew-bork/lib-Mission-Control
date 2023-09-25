@@ -7,6 +7,16 @@
 #include <vector>
 #include <functional>
 
+
+template<typename T>
+struct readable {
+    T data;
+    
+    static std::string serialize(T t);
+};
+template <>
+static std::string readable<double>::serialize(double d);
+
 struct mission_control {
 
     enum data_type {
