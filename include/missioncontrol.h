@@ -83,15 +83,23 @@ struct readable{
 
 struct mission_control {
 
-    enum data_type {
-        INT, DOUBLE, STRING, BOOL, NONE,
-    };
+    struct log_message {
+        std::string msg;
+        std::string type;
+        time_t time;
 
+        log_message(std::string _msg, std::string _type);
+    };
     // std::vector<readable> bound_readables;
+    std::vector<std::pair<std::string, std::string>> bound_readables_advertisement;
+    std::vector<std::pair<std::string, std::string>> bound_writables_advertisement;
+
     std::vector<std::function<std::string(void)>> bound_readables;
-    std::string update_changes;
+    std::vector<std::string> set_readables;
     std::unordered_map<std::string, std::function<void(std::string)>> bound_writables;
     std::unordered_map<std::string, std::function<void(std::vector<std::string>)>> commands;
+
+    std::vector<log_message> output_log;
 
     pollfd poll_struct;
     int socket_fd = -1;
@@ -100,14 +108,22 @@ struct mission_control {
 
     template<typename T>
     void add_writable(std::string name, T& value, std::function<T(T&)> update);
-    // void bind_readable(std::string name, double& value);
+
     template<typename T>
     void bind_readable(std::string name, const T& t);
     template<typename T>
     void bind_readable(const readable<T>& t);
 
-    void change(std::string name, double value);
+    template<typename T>
+    void set(std::string name, T value);
 
+    template<typename... T> void printf(T&...);
+    template<typename... T> void printf_error(T&...);
+
+    void log(std::string s);
+    void log_error(std::string s);
+
+    void advertise();
     void tick();
 
 
@@ -156,6 +172,7 @@ std::string serialize::serialize(const std::vector<T>& s) {
 
 template<typename T>
 void mission_control::bind_readable(std::string name, const T& t) {
+    bound_readables_advertisement.push_back(std::make_pair(name, ""));
     bound_readables.push_back([&]() -> std::string {
         return name + ':' + serialize::serialize(t);
     });
@@ -163,6 +180,7 @@ void mission_control::bind_readable(std::string name, const T& t) {
 
 template<typename T>
 void mission_control::bind_readable(const readable<T>& t) {
+    bound_readables_advertisement.push_back(std::make_pair(t.name, ""));
     bound_readables.push_back([&]() -> std::string {
         return t.serialize();
     });
@@ -170,6 +188,7 @@ void mission_control::bind_readable(const readable<T>& t) {
 
 template<typename T>
 void mission_control::add_writable(std::string name, T& value, std::function<T(T&)> update) {
+    bound_writables_advertisement.push_back(std::make_pair(name, ""));
     bound_writables[name] = [&](std::string s) {
         T deserialized = serialize::deserialize<T>(s);
         value = update(deserialized);

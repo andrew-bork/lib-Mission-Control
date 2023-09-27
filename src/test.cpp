@@ -44,14 +44,26 @@ int main() {
     // list.data.push_back(1);
     control.bind_readable(list);
 
+    control.log("Finished init!");
+
     std::cout << "testing: " << control.build_msg() << std::endl;
 
-    control.tick();
+    control.advertise();
     usleep(1000000);
+    return -1;
+
+    int i = 0;
+    int j = 0;
+    control.tick();
     while(true) {
         angular_acceleration = *angle * -1;
         angular_velocity = *angular_velocity + *angular_acceleration * 0.01;
         angle = *angle + *angular_velocity * 0.01;
+        i ++;
+        if(i %24 == 23) {
+            j++;
+            control.log("Logging "+std::to_string(j));
+        }
         usleep(1000000/24);
         control.tick();
     }

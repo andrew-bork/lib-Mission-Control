@@ -2,12 +2,11 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <ctime>
 
-void mission_control::change(std::string name, double value) {
-    update_changes += name;
-    update_changes += '=';
-    update_changes += std::to_string(value);
-    update_changes += ';';
+template<typename T>
+void mission_control::set(std::string name, T value) {
+    set_readables.push_back(name + ":" + serialize::serialize(value));
 }
 
 void mission_control::_connect_unix(const char * path) {
@@ -41,18 +40,98 @@ mission_control::mission_control(const char * path) {
     _init_pollfd();
 }
 
+void mission_control::advertise() {
+    std::string msg = "{\"type\": \"advertise\"";
 
-
-std::string mission_control::build_msg() {
-    std::string out = "{";
-    for(size_t i = 0; i < bound_readables.size(); i ++) {
-        if(i > 0) out += ",";
-        out += bound_readables[i]();
+    {
+        msg += ",\"readables\":{";
+        bool first = true;
+        for(size_t i = 0; i < bound_readables_advertisement.size(); i ++) {
+            if(first) first = false;
+            else msg += ",";
+            msg += "\"" + bound_readables_advertisement[i].first + "\":\"" + bound_readables_advertisement[i].second + "\"";
+        }
+        msg += "}";
     }
-    out += update_changes;
+
+    {
+
+        msg += ",\"commands\":[";
+        bool first = true;
+        for(auto i = commands.begin(); i != commands.end(); i ++) {
+            if(first) first = false;
+            else msg += ",";
+            msg += "\"" + (*i).first + "\"";
+        }
+        msg += "]";
+    }
+
+    msg += "}";
+
+    _write(msg);
+}
+
+/**
+ *      Mission Control Response format::
+ *          {
+ *              "type": "update"|"advertise", // "update" on "tick()" calls. "advertise" on "advertise()" calls.
+ *              "readables": { // Only sent during "advertise()" calls
+ *              
+ *              },
+ *              "commands": [ // Only sent during "advertise()" calls
+ *              
+ *              ],
+ *              "data": { // Only added during "tick()" calls
+ *                  // Bound readables every tick
+ *                  // Set readables when they are set
+ *              },
+ * 
+ *              "out": [ // Only added when there is new console output in "tick()" calls
+ *                  { "msg": "message", "type": "error" | "info" }
+ *              ]
+ *          }
+*/
+std::string mission_control::build_msg() {
+    std::string out = "{\"type\": \"update\",";
+    {
+        out += "\"data\":{";
+        bool first = true;
+        for(size_t i = 0; i < bound_readables.size(); i ++) {
+            if(first) {
+                first = false;
+            }else {
+                out += ',';
+            }
+            out += bound_readables[i]();
+        }
+        for(size_t i = 0; i < set_readables.size(); i ++) {
+            if(first) {
+                first = false;
+            }else {
+                out += ',';
+            }
+            out += set_readables[i];
+        }
+        out += "}";
+    }
+    if(!output_log.empty()) {
+        out += ",\"out\":[";
+        bool first = true;
+        
+        for(size_t i = 0; i < output_log.size(); i ++) {
+            if(first) {
+                first = false;
+            }else {
+                out += ',';
+            }
+            out += "{\"msg\":\"" + output_log[i].msg + "\",\"type\":\"" + output_log[i].type + "\",\"time\":"+std::to_string(output_log[i].time)+"}";
+        }
+        out += "]";
+    }
     out += "}";
     return out;
 }
+
 std::string::iterator mission_control::_parse_next_command(std::string::iterator i, std::string::const_iterator end, command_call& call) {
     call.command = "";
     call.args.clear();
@@ -85,7 +164,6 @@ std::string::iterator mission_control::_parse_next_command(std::string::iterator
 }
 
 void mission_control::run_command(const command_call& call) {
-    printf("Running \"%s\"\n",call.command.c_str());
     if(call.command == "set") { // "set" command is built-in
         if(call.args.size() != 2) return;
 
@@ -146,13 +224,23 @@ void mission_control::_handle_commands() {
     }
 }
 
+void mission_control::log(std::string message) {
+    output_log.emplace_back(message, "info");
+}
+void mission_control::log_error(std::string message) {    
+    output_log.emplace_back(message, "error");
+}
+
 void mission_control::tick() { 
-    std::string msg = build_msg();
+    
+    // Construct output string.
+    _write(build_msg());
 
     // Reset the update_changes;
-    update_changes = "";
+    set_readables.clear();
+    output_log.clear();
 
-    _write(msg);
+    // Check incoming commands.
     _handle_commands();
 }
 
@@ -257,4 +345,10 @@ std::vector<std::string> serialize::deserialize<std::vector<std::string>>(const 
     }
 
     return out;
+}
+
+mission_control::log_message::log_message(std::string _msg, std::string _type) {
+    msg = _msg;
+    type = _type;
+    time = std::time(nullptr);
 }
