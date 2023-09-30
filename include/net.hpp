@@ -1,5 +1,15 @@
 #ifndef NET_H
 #define NET_H
+/**
+ * @file net.hpp
+ * @brief netcode. This is just a lot of netcode. Supports unix and tcp sockets (hopefully).
+ * @version 0.1
+ * @date 2023-09-30
+ * 
+ * @copyright Copyright (c) 2023
+ * 
+ */
+
 
 #include <errno.h>
 #include <sys/socket.h>
@@ -109,8 +119,10 @@ void net::server::start_listening() {
 }
 
 void net::server::broadcast(const std::string& s) {
-    for(auto i = connections.begin(); i != connections.end(); i ++) {
-        (*(*i).second) << s;
+    for(size_t i = 1; i < pollfds.size(); i ++) {
+        if(!chk_bit(pollfds[i].fd, POLLHUP)){
+            write(pollfds[i].fd, &s[0], s.size());
+        }
     }
 }
 
@@ -135,43 +147,46 @@ std::vector<std::string> net::server::process_incoming() {
         _pollfd.events = POLLIN;
         
         pollfds.push_back(_pollfd);
-        printf("client connected: %d\n", pollfds.size()-1);
+        printf("client connected: %d\n", client_fd);
 
-        std::unique_ptr<net::socket> client = std::make_unique<net::socket>(client_fd);
+        // std::unique_ptr<net::socket> client = std::make_unique<net::socket>(client_fd);
 
-        connections[client_fd] = std::move(client);
+        // connections[client_fd] = std::move(client);
     }
 
     size_t n_closed_fds = 0;
     for(size_t i = 1; i < pollfds.size(); i ++) {
         if(chk_bit(pollfds[i].revents, POLLNVAL)) n_closed_fds++;
-
         else if(chk_bit(pollfds[i].revents, POLLHUP)) {
-            printf("closing connection: %d\n", pollfds.size()-2);
-            // delete connections[pollfds[i].fd];
-            connections.erase(pollfds[i].fd);
+            n_closed_fds++;
         }else if(chk_bit(pollfds[i].revents, POLLIN)) {
-            // int fd = pollfds[i].fd;
+            int fd = pollfds[i].fd;
+            printf("Reading from %d\n", fd);
 
             // std::unique_ptr<net::socket>& client = connections[fd];
 
-            // char buf[4096];
-            // size_t n_bytes = recv(fd, buf, 4095, 0);
+            char buf[4096];
+            size_t n_bytes = recv(fd, buf, 4095, 0);
             // if(n_bytes == -1) {
             //     // throw std::runtime_error("Error with recv");
             // }
-            // buf[n_bytes] = '\0';
+            buf[n_bytes] = '\0';
             
-            // printf("client message: \"%s\"\n", buf);
-            // out.emplace_back(buf);
+            printf("client message: \"%s\"\n", buf);
+            out.emplace_back(buf);
             // std::string data(buf);
         }
     }
 
 
-    if(n_closed_fds > pollfds.size() / 2) {
+    if(n_closed_fds > 0) {
+        printf("Cleaning up dead sockets\n");
         for(size_t i = pollfds.size() - 1; i >= 1; i --) {
-            if(chk_bit(pollfds[i].revents, POLLNVAL)) pollfds.erase(pollfds.begin() + i);
+            if(chk_bit(pollfds[i].revents, POLLNVAL) || chk_bit(pollfds[i].revents, POLLHUP)) {
+                // connections.erase(pollfds[i].fd);
+                close(pollfds[i].fd);
+                pollfds.erase(pollfds.begin() + i);
+            }
         }
     }
 

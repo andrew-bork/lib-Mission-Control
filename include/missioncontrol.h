@@ -1,6 +1,13 @@
 #ifndef MISSION_CONTROL_H
 #define MISSION_CONTROL_H
-
+/**
+ * @file missioncontrol.h
+ * @brief This is a header only file for libmissioncontrol
+ * @version 0.1
+ * @date 2023-09-30
+ * 
+ * 
+ */
 #include <string>
 #include <unordered_map>
 #include <poll.h>
@@ -8,7 +15,11 @@
 #include <functional>
 #include <net.hpp>
 
-
+/**
+ * @brief The serialize namespace contains all the serialize() methods in order to serialize readable objects.
+ * In order to serialize custom objects, make sure to implement your own serialize() method before including missioncontrol.h
+ * 
+ */
 namespace serialize {
     std::string serialize(const double& d);
 
@@ -45,10 +56,20 @@ namespace serialize {
 
 };
 
+/**
+ * @brief A readable wrapper. Shorthand to name variables easily. Use *readable in order to retrieve a reference to the underlying data.
+ * 
+ * @tparam T 
+ */
 template<typename T>
 struct readable{
     T data;
     std::string name;
+    /**
+     * @brief Construct a new readable object with a name
+     * 
+     * @param _name 
+     */
     readable(std::string _name) {
         name = _name;
     }
@@ -56,32 +77,73 @@ struct readable{
         name = _name;
         data = T(args...);
     }
+    /**
+     * @brief Copy an existing object
+     * 
+     * @param _name 
+     * @param copied 
+     */
     readable(std::string _name, const T& copied) {
         name = _name;
         data = copied;
     }
+    /**
+     * @brief Copy and destroy an existing object
+     * 
+     * @param _name 
+     * @param destroyed 
+     */
     readable(std::string _name, T&& destroyed) {
         name = _name;
         data = destroyed;
     }
-    //std::enable_if<data.serialze, std::function<std::string(void)>>
+
+    /**
+     * @brief Serialize readable
+     * 
+     * @return std::string 
+     */
     std::string serialize() const {
         return '\"' + name + "\":" + serialize::serialize(data);
     }
 
+    /**
+     * @brief Implicit conversions
+     * 
+     * @return T& 
+     */
     operator T&() { return data; }
     operator T() const { return data; }
 
+    /**
+     * @brief Be able to set the readable
+     * 
+     * @param copied 
+     */
     void operator = (const T& copied) {
         data = copied;
     }
 
+    /**
+     * @brief Implement *readable
+     * 
+     * @return T& 
+     */
     T& operator* () {
         return data;
     }
 };
 
+/**
+ * @brief Underlying structure that communicates with mission control.
+ * 
+ */
 struct mission_control {
+    /**
+     * @brief Mission control executable command
+     * 
+     */
+    typedef std::function<void(std::vector<std::string>)> command;
 
     struct log_message {
         std::string msg;
@@ -91,61 +153,139 @@ struct mission_control {
         log_message(std::string _msg, std::string _type);
     };
     // std::vector<readable> bound_readables;
+    /**
+     * @brief Construct a new mission control object without a connection
+     * 
+     */
+    mission_control(); 
+    /**
+     * @brief Construct a new mission control object with a unix connection
+     * 
+     * @param path 
+     */
+    mission_control(const char * path); 
+    // mission_control(unsigned int port); 
+
+    template<typename T>
+    /**
+     * @brief Add a writable parameter. update(newvalue) will get run when set on this writable is called.
+     * Return the new value of the writable.
+     * 
+     * @param name 
+     * @param value 
+     * @param update 
+     */
+    void add_writable(std::string name, T& value, std::function<T(T&)> update);
+
+    template<typename T>
+    /**
+     * @brief Bind a readable variable. Ensure the variable has enough lifetime. Ensure that the type has a serialize() implemented.
+     * 
+     * @param name 
+     * @param t 
+     */
+    void bind_readable(std::string name, const T& t);
+    template<typename T>
+    /**
+     * @brief Bind a readable. Ensure the variable has enough lifetime. Ensure that the type has a serialize() implemented. 
+     * 
+     * @param t 
+     */
+    void bind_readable(const readable<T>& t);
+
+    template<typename T>
+    /**
+     * @brief A one time set. Variable lifetime does not matter.
+     * 
+     * @param name 
+     * @param value 
+     */
+    void set(std::string name, T value);
+
+    /**
+     * @brief Add a command 
+     * 
+     * @param name 
+     * @param _command 
+     */
+    void add_command(std::string name, command _command);
+
+    // template<typename... T> void printf(T&...);
+    // template<typename... T> void printf_error(T&...);
+
+    /**
+     * @brief Log "info"
+     * 
+     * @param s 
+     */
+    void log(std::string s);
+    /**
+     * @brief Log "error"
+     * 
+     * @param s 
+     */
+    void log_error(std::string s);
+
+    /**
+     * @brief Advertise all readables and commands.
+     * 
+     */
+    void advertise();
+    /**
+     * @brief Process incoming commands, then update mission control on the bound variables
+     * 
+     */
+    void tick();
+
+    /**
+     * @brief Connect (unix socket)
+     * 
+     * @param path 
+     */
+    void connect(const char * path);
+    /**
+     * @brief Connect (tcp socket)
+     * 
+     * @param port 
+     */
+    void connect(unsigned short port);
+
+
+    /**
+     * @brief Contains the command name and the arguments that will be sent to the command.
+     * 
+     */
+    struct command_call {
+        std::string command;
+        std::vector<std::string> args;
+    };
+
+    /**
+     * @brief Runs the command based on the command call struct
+     * 
+     * @param command 
+     */
+    void run_command(const command_call& command);
+
+
+private:
     std::vector<std::pair<std::string, std::string>> bound_readables_advertisement;
     std::vector<std::pair<std::string, std::string>> bound_writables_advertisement;
 
     std::vector<std::function<std::string(void)>> bound_readables;
     std::vector<std::string> set_readables;
     std::unordered_map<std::string, std::function<void(std::string)>> bound_writables;
-    std::unordered_map<std::string, std::function<void(std::vector<std::string>)>> commands;
+    std::unordered_map<std::string, command> commands;
 
     std::vector<log_message> output_log;
 
     std::unique_ptr<net::server> server;
 
-    mission_control(); 
-    mission_control(const char * path); 
-    // mission_control(unsigned int port); 
-
-    template<typename T>
-    void add_writable(std::string name, T& value, std::function<T(T&)> update);
-
-    template<typename T>
-    void bind_readable(std::string name, const T& t);
-    template<typename T>
-    void bind_readable(const readable<T>& t);
-
-    template<typename T>
-    void set(std::string name, T value);
-
-    template<typename... T> void printf(T&...);
-    template<typename... T> void printf_error(T&...);
-
-    void log(std::string s);
-    void log_error(std::string s);
-
-    void advertise();
-    void tick();
-
-
-    std::string remaining_message = "";
-    void connect(const char * path);
-    void connect(unsigned short port);
-
     void _handle_commands();
-
-    struct command_call {
-        std::string command;
-        std::vector<std::string> args;
-    };
-
     std::string::iterator _parse_next_command(std::string::iterator i, std::string::const_iterator end, command_call& call);
-
-    void run_command(const command_call& command);
-    // void _connect_serial();
-
     void _write(std::string s);
     std::string build_msg();
+
 };
 
 template<typename T>
@@ -220,6 +360,7 @@ mission_control::mission_control(const char * path) {
 }
 
 void mission_control::advertise() {
+    printf("Advertising...\n");
     std::string msg = "{\"type\": \"advertise\"";
 
     {
@@ -248,6 +389,8 @@ void mission_control::advertise() {
     msg += "}\x1f";
 
     _write(msg);
+
+    printf("Finished advertising\n");
 }
 
 /**
@@ -343,6 +486,7 @@ std::string::iterator mission_control::_parse_next_command(std::string::iterator
 }
 
 void mission_control::run_command(const command_call& call) {
+    ::printf("\"%s\" command recieved\n", call.command.c_str());
     if(call.command == "set") { // "set" command is built-in
         if(call.args.size() != 2) return;
 
@@ -351,7 +495,10 @@ void mission_control::run_command(const command_call& call) {
 
         if(bound_writables.count(name) > 0) bound_writables[name](value);
         else log_error("\\\""+name+"\\\" is not a writable parameter.");
+    }else if(call.command == "advertise"){
+        advertise();
     }else if(commands.count(call.command) > 0) {
+        printf("Command found\n");
         try {
             commands[call.command](call.args);
         }catch(std::exception e) {
@@ -364,8 +511,13 @@ void mission_control::run_command(const command_call& call) {
 
 
 void mission_control::_handle_commands() {
+    // ::printf("Getting messages\n");
     std::vector<std::string> messages = server->process_incoming();
-
+    // ::printf("Messages:\n");
+    // int i = 1;
+    // for(auto& message : messages) {
+    //     ::printf("%3d : %s\n", i++, message.c_str());
+    // }
     for(auto& message : messages) {
         std::string incoming_msg = message;
         ::printf("cmd: %s\n", incoming_msg.c_str());
@@ -376,10 +528,10 @@ void mission_control::_handle_commands() {
         bool parsing = true;
         while(parsing) {
             auto j = _parse_next_command(i, end, call);
-
             // Advance iterator and run command, unless there is no more message, then add the rest of the message to remaining message.
             if(j == end) {
-                remaining_message = std::string(i, end);
+                // remaining_message = std::string(i, end);
+                // ::printf("rem: \"%s\"\n", remaining_message.c_str());
                 parsing = false;
             }else {
                 
@@ -393,6 +545,7 @@ void mission_control::_handle_commands() {
 }
 
 void mission_control::log(std::string message) {
+    // printf("Logging %s\n", message.c_str());
     output_log.emplace_back(message, "info");
 }
 void mission_control::log_error(std::string message) {    
@@ -401,15 +554,16 @@ void mission_control::log_error(std::string message) {
 
 void mission_control::tick() { 
     
-    // Construct output string.
-    _write(build_msg());
+    // Check incoming commands.
+    _handle_commands();
 
     // Reset the update_changes;
     set_readables.clear();
     output_log.clear();
 
-    // Check incoming commands.
-    _handle_commands();
+    
+    // Construct output string.
+    _write(build_msg());
 }
 
 void mission_control::_write(std::string s) {
@@ -515,6 +669,10 @@ mission_control::log_message::log_message(std::string _msg, std::string _type) {
     msg = _msg;
     type = _type;
     time = std::time(nullptr);
+}
+
+void mission_control::add_command(std::string name, mission_control::command _command) {
+    commands[name] = _command;
 }
 
 #endif

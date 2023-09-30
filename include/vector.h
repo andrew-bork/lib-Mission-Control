@@ -1,3 +1,9 @@
+/**
+ * @brief TESTING ONLY
+ * Its just a vector. Simple test data structure
+ * 
+ */
+
 namespace math {
     struct vector{
         double x,y,z;

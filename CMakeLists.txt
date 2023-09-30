@@ -9,7 +9,7 @@ include_directories(include)
 # add_library(missioncontrol STATIC src/missioncontrol.cpp)
 
 
-add_executable(test src/test.cpp src/missioncontrol.cpp)
+# add_executable(test src/test.cpp src/missioncontrol.cpp)
 # target_link_libraries(test missioncontrol)
 
 # Turn on all warning.
