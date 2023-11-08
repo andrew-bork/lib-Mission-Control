@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 23)
 project(libmissioncontrol)
 include_directories(include)
 
-# add_library(missioncontrol STATIC src/missioncontrol.cpp)
+add_library(missioncontrol STATIC src/missioncontrol.cpp)
 
 
 # add_executable(test src/test.cpp src/missioncontrol.cpp)
